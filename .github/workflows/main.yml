@@ -1,12 +1,9 @@
-name: Build NicotineIntervals signed APK
+name: Build APK WITHOUT SECRETS
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ main ]
-    paths:
-      - 'source.zip'
-      - '.github/workflows/main.yml'
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,59 +12,42 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Java 17
+      - name: Install Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Gradle 8.9
+      - name: Install Gradle 8.9
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Android SDK
+      - name: Prepare Android SDK
         uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
 
-      - name: Install Android 35
-        shell: bash
+      - name: Install Android API 35
         run: |
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
 
-      - name: Unpack source
-        shell: bash
+      - name: Extract application source
         run: |
-          test -s source.zip || { echo 'Upload source.zip to repo root'; exit 1; }
+          test -s source.zip || { echo 'source.zip is missing'; exit 1; }
           unzip -q source.zip
           test -f NicotineIntervals/app/build.gradle
 
-      - name: Build signed RELEASE APK
-        shell: bash
+      - name: Compile debug APK
         working-directory: NicotineIntervals
-        env:
-          NI_KEYSTORE_BASE64: ${{ secrets.NI_KEYSTORE_BASE64 }}
-          NI_KEYSTORE_PASSWORD: ${{ secrets.NI_KEYSTORE_PASSWORD }}
-          NI_KEY_ALIAS: ${{ secrets.NI_KEY_ALIAS }}
-          NI_KEY_PASSWORD: ${{ secrets.NI_KEY_PASSWORD }}
-        run: |
-          test -n "$NI_KEYSTORE_BASE64" || { echo 'Missing NI_KEYSTORE_BASE64 repository secret'; exit 1; }
-          test -n "$NI_KEYSTORE_PASSWORD" || { echo 'Missing NI_KEYSTORE_PASSWORD repository secret'; exit 1; }
-          test -n "$NI_KEY_ALIAS" || { echo 'Missing NI_KEY_ALIAS repository secret'; exit 1; }
-          test -n "$NI_KEY_PASSWORD" || { echo 'Missing NI_KEY_PASSWORD repository secret'; exit 1; }
-          printf '%s' "$NI_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/nicotineintervals-release.jks"
-          export NI_KEYSTORE_FILE="$RUNNER_TEMP/nicotineintervals-release.jks"
-          gradle :app:assembleRelease --stacktrace
-          test -s app/build/outputs/apk/release/app-release.apk
+        run: gradle :app:assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: NicotineIntervals-v2-signed-apk
-          path: NicotineIntervals/app/build/outputs/apk/release/app-release.apk
+          name: NicotineIntervals-v2-debug
+          path: NicotineIntervals/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
